@@ -493,6 +493,121 @@ def opportunity_page(sales_f: pd.DataFrame, inv_f: pd.DataFrame) -> None:
     )
 
 
+def business_recommendations_page(sales_f: pd.DataFrame, inv_f: pd.DataFrame, summary: dict[str, float]) -> None:
+    render_panel(
+        'What actions should management take next?',
+        'Recommendations are generated from the current filtered slice and prioritised around revenue risk, inventory efficiency, pricing discipline, and store execution.',
+        'Business recommendations',
+    )
+
+    latest_inventory = inv_f[inv_f['snapshot_date'] == inv_f['snapshot_date'].max()].copy()
+    recs: list[dict[str, str | float]] = []
+
+    if not latest_inventory.empty:
+        critical = latest_inventory[latest_inventory['cover_days'] < 7].copy()
+        if not critical.empty:
+            critical_value = float(critical['inventory_value_cost'].sum())
+            stockout_share = float((critical['stockout_flag'] == 1).mean()) if 'stockout_flag' in critical else 0
+            recs.append({
+                'priority': 1,
+                'theme': 'Inventory replenishment',
+                'recommendation': 'Replenish critical low-cover SKUs before the next supplier lead-time window closes.',
+                'why_it_matters': f"{len(critical):,} SKU-store positions are below 7 cover days, putting roughly {fmt_currency(critical_value)} of working assortment at risk.",
+                'evidence': f"Critical cover share: {len(critical)/len(latest_inventory):.1%} | Stockout presence inside critical pool: {stockout_share:.1%}",
+                'owner': 'Supply chain / planning',
+            })
+
+        excess = latest_inventory[latest_inventory['cover_days'] > 60].copy()
+        if not excess.empty:
+            excess_value = float(excess['inventory_value_cost'].sum())
+            recs.append({
+                'priority': 2,
+                'theme': 'Inventory efficiency',
+                'recommendation': 'Reduce excess cover on slow-moving SKUs through transfers, markdowns, or smaller future buys.',
+                'why_it_matters': f"{len(excess):,} SKU-store positions sit above 60 cover days, tying up about {fmt_currency(excess_value)} in stock cost.",
+                'evidence': f"Excess cover share: {len(excess)/len(latest_inventory):.1%}",
+                'owner': 'Merchandising / planning',
+            })
+
+    store_perf = sales_f.groupby('store_name', as_index=False)[['net_revenue', 'gross_profit']].sum()
+    if not store_perf.empty and not latest_inventory.empty:
+        stockout_by_store = latest_inventory.groupby('store_name', as_index=False)['stockout_flag'].mean()
+        store_perf = store_perf.merge(stockout_by_store, on='store_name', how='left')
+        high_rev_cut = store_perf['net_revenue'].quantile(0.75)
+        pressure = store_perf[(store_perf['net_revenue'] >= high_rev_cut) & (store_perf['stockout_flag'] >= store_perf['stockout_flag'].median())]
+        if not pressure.empty:
+            focus_stores = ', '.join(pressure.sort_values('net_revenue', ascending=False)['store_name'].head(3).tolist())
+            recs.append({
+                'priority': 3,
+                'theme': 'Store operations',
+                'recommendation': 'Prioritise in-stock execution at the highest-value branches before expanding assortment or promotions.',
+                'why_it_matters': f"High-revenue stores are still carrying above-median stockout pressure, with the clearest focus on {focus_stores}.",
+                'evidence': f"Pressure stores identified: {len(pressure)} | Current overall stockout rate: {summary['stockout_rate']:.1%}",
+                'owner': 'Retail operations',
+            })
+
+    discount_mix = sales_f.copy()
+    if not discount_mix.empty:
+        no_disc = discount_mix[discount_mix['discount_pct'] == 0]
+        disc = discount_mix[discount_mix['discount_pct'] > 0]
+        no_disc_margin = float((no_disc['gross_profit'].sum() / no_disc['net_revenue'].sum())) if not no_disc.empty and no_disc['net_revenue'].sum() else 0
+        disc_margin = float((disc['gross_profit'].sum() / disc['net_revenue'].sum())) if not disc.empty and disc['net_revenue'].sum() else 0
+        if not disc.empty and disc_margin < no_disc_margin:
+            recs.append({
+                'priority': 4,
+                'theme': 'Pricing and promotions',
+                'recommendation': 'Tighten discount depth and reserve promotions for traffic-driving or strategic SKUs only.',
+                'why_it_matters': f"Discounted mix is {summary['discounted_mix']:.1%} of transactions, but discounted margin trails full-price margin.",
+                'evidence': f"Discounted margin: {disc_margin:.1%} | Full-price margin: {no_disc_margin:.1%}",
+                'owner': 'Commercial / pricing',
+            })
+
+    sku = sales_f.groupby(['sku', 'product_name', 'category'], as_index=False)[['net_revenue', 'gross_profit']].sum()
+    if not sku.empty:
+        sku = sku.sort_values('net_revenue', ascending=False).reset_index(drop=True)
+        sku['revenue_share'] = sku['net_revenue'] / sku['net_revenue'].sum()
+        sku['cum_share'] = sku['revenue_share'].cumsum()
+        hero = sku[sku['cum_share'] <= 0.8]
+        if not hero.empty:
+            recs.append({
+                'priority': 5,
+                'theme': 'Assortment strategy',
+                'recommendation': 'Protect hero SKUs with tighter availability targets and simplify the long tail where demand is weak.',
+                'why_it_matters': f"Only {len(hero):,} SKUs generate roughly 80% of revenue in this slice, indicating strong assortment concentration.",
+                'evidence': f"Hero SKU share of assortment: {len(hero)/len(sku):.1%}",
+                'owner': 'Merchandising',
+            })
+
+    recs_df = pd.DataFrame(recs).sort_values('priority') if recs else pd.DataFrame(columns=['priority','theme','recommendation','why_it_matters','evidence','owner'])
+
+    if recs_df.empty:
+        st.info('No recommendations were generated for the current filters.')
+        return
+
+    top1, top2 = st.columns(2)
+    with top1:
+        render_insight_card(
+            'Top recommendation',
+            f"<b>{recs_df.iloc[0]['recommendation']}</b><br><br>{recs_df.iloc[0]['why_it_matters']}",
+            'Priority 1',
+        )
+    with top2:
+        render_insight_card(
+            'Management takeaway',
+            'Use this page as the closing narrative in your portfolio demo: what happened, why it matters, and what the business should do next.',
+            'Storytelling',
+        )
+
+    st.subheader('Prioritised recommendation queue')
+    st.dataframe(recs_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        'Download business recommendations as CSV',
+        data=recs_df.to_csv(index=False).encode('utf-8'),
+        file_name='mamboo_business_recommendations.csv',
+        mime='text/csv',
+    )
+
+
 inject_css()
 sales, inventory, stores = get_data()
 min_date = sales['order_date'].dt.date.min()
@@ -563,6 +678,7 @@ pages = st.tabs([
     'Inventory Health',
     'Promotions',
     'Opportunity Queue',
+    'Business Recommendations',
 ])
 
 with pages[0]:
@@ -577,5 +693,7 @@ with pages[4]:
     promo_page(sales_f)
 with pages[5]:
     opportunity_page(sales_f, inv_f)
+with pages[6]:
+    business_recommendations_page(sales_f, inv_f, summary)
 
 st.caption('Built with Streamlit, Python, Plotly, and SQLite using synthetic retail data for portfolio use.')

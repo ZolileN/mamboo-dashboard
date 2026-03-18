@@ -110,6 +110,35 @@ Add these once you publish:
 - a section called `Business Recommendations`
 - your LinkedIn and live demo link if you deploy it
 
+## Business Recommendations
+
+Based on the dashboard analytics, here are key strategic recommendations for retail operations:
+
+### Inventory Optimization
+- **Prioritize replenishment** for high-velocity SKUs showing stockout risk, particularly in top-performing branches
+- **Implement inter-store transfers** for overstocked items in low-demand locations to high-demand locations
+- **Reduce safety stock** for slow-moving items to improve cash flow and warehouse capacity
+
+### Store Performance Enhancement
+- **Address availability constraints** in high-potential branches that are underperforming due to stock issues
+- **Operational intervention** for stores showing consistent margin compression despite strong sales
+- **Staff training and process improvement** for locations with low inventory turnover rates
+
+### Category & SKU Strategy
+- **Protect and expand hero products** that drive disproportionate revenue and margin
+- **Rationalize underperforming SKUs** that tie up capital without contributing to profitability
+- **Focus on high-margin categories** during promotional planning to maximize return on marketing spend
+
+### Promotion & Pricing Optimization
+- **Target discount bands** that demonstrate profitable growth rather than margin erosion
+- **Bundle promotions** for complementary categories to increase basket size
+- **Dynamic pricing** for seasonal items to optimize revenue throughout the product lifecycle
+
+### Strategic Growth Opportunities
+- **Expand successful formats** by replicating best practices from top-performing branches
+- **Category expansion** in stores showing strong demand but limited assortment
+- **Data-driven assortment planning** based on regional performance patterns and customer preferences
+
 ## Good demo script for interviews
 A tight walkthrough can sound like this:
 1. Start on the executive page and frame the commercial story.
