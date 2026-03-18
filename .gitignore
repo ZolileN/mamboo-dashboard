@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Streamlit
+.streamlit/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Local database artifacts
+*.db-journal
